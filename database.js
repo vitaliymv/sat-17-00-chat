@@ -4,6 +4,7 @@ const fs = require("fs");
 const exists = fs.existsSync(dbFile);
 const sqlite3 = require("sqlite3").verbose();
 let db;
+const crypto = require("crypto");
 
 dbWrapper.open({
     filename: dbFile,
@@ -17,16 +18,11 @@ dbWrapper.open({
                 `CREATE TABLE user (
                     user_id INTEGER PRIMARY KEY AUTOINCREMENT,
                     login TEXT,
-                    password TEXT
+                    password TEXT,
+                    salt TEXT
                 );`
             );
 
-            await db.run(
-                `INSERT INTO user (login, password) VALUES
-                ('admin', '123456'),
-                ('user', 'qwerty');`
-            )   
-            
             await db.run(
                 `CREATE TABLE message(
                     msg_id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -77,13 +73,40 @@ module.exports = {
     },
 
     addUser: async (user) => {
+        const salt = crypto.randomBytes(16).toString("hex");
+        const password = crypto.pbkdf2Sync(
+            user.password, salt,
+            1000, 64, 'sha512'
+        ).toString("hex");
         try {
             await db.run(
-                "INSERT INTO user(login, password) VALUES (?, ?)",
-                [user.login, user.password]
+                "INSERT INTO user(login, password, salt) VALUES (?, ?, ?)",
+                [user.login, password, salt]
             )
         } catch (error) {
             console.log(error);
         }
+    },
+    getAuthToken: async (user) => {
+        const candidate = await db.all(
+            "SELECT * FROM user WHERE login = ?",
+            [user.login]
+        );
+
+        if (!candidate.length) {
+            throw "Wrong login"
+        }
+        const {user_id, login, password, salt} = candidate[0];
+        const hash = crypto.pbkdf2Sync(
+            user.password, salt,
+            1000, 64, "sha512"
+        ).toString("hex");
+        if (password !== hash) {
+            throw "Wrong password"
+        }
+
+        return candidate[0].user_id + "."
+            + candidate[0].login + "."
+            + crypto.randomBytes(20).toString("hex");
     }
 }

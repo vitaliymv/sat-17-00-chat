@@ -1,4 +1,8 @@
-const socket = io();
+const socket = io({
+    auth: {
+        cookie: document.cookie
+    }
+});
 const messages = document.getElementById("messages");
 const form = document.getElementById("form");
 const input = document.getElementById("input");
@@ -25,4 +29,9 @@ socket.on("all_messages", msgArray => {
         messages.appendChild(item);
     });
     window.scrollTo(0, document.body.scrollHeight);
+})
+
+document.getElementById("logout").addEventListener("click", () => {
+    document.cookie = "token=; max-age=0";
+    location.reload();
 })
